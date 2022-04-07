@@ -5,6 +5,8 @@ import logging, threading, asyncio, datetime
 
 from mopidy.audio import PlaybackState
 
+import pkg_resources
+
 import pypresence, requests
 import musicbrainzngs as mb
 
