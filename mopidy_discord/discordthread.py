@@ -13,6 +13,9 @@ import musicbrainzngs as mb
 logger = logging.getLogger(__name__)
 __version__ = pkg_resources.get_distribution("Mopidy-Discord").version
 
+# TODO: store this on disk instead (maybe in a db)
+covercache = dict()
+
 class DiscordThread(threading.Thread):
     def __init__(self, config, core, pid):
         super().__init__()
@@ -44,6 +47,8 @@ class DiscordThread(threading.Thread):
             if not self.updateEvent.is_set():
                 continue
 
+            self.updateEvent.clear()
+
             logger.info("Updating presence")
 
             playback = self.core.playback
@@ -54,7 +59,6 @@ class DiscordThread(threading.Thread):
             #       config
             if not (track and (playback.get_state().get() == PlaybackState.PLAYING)):
                 self.discord.clear(self.pid)
-                self.updateEvent.clear()
                 continue
 
             # TODO: what the fuck is this god I don't know how to write code
@@ -87,14 +91,15 @@ class DiscordThread(threading.Thread):
                     pid = self.pid
                 )
 
-            self.updateEvent.clear()
-
         logger.info("Closing Discord RPC")
         self.discord.close()
 
 # TODO: try to upload local cover file to remote server instead of bothering
 #       musicbrainz
 def get_cover(track):
+    if (list(track.artists)[0].name in covercache) and (track.album.name in covercache[list(track.artists)[0].name]):
+            return covercache[list(track.artists)[0].name][track.album.name]
+
     # this could probably easily fail LOL
     img_url = ""
     mb.set_useragent(app="mopidy-discord", version=__version__, contact="fantoro@outlook.com")
@@ -105,5 +110,9 @@ def get_cover(track):
     imgs = mb.get_release_group_image_list(recording["id"])
 
     img_url = imgs["images"][0]["thumbnails"]["large"]
+
+    if not (list(track.artists)[0].name in covercache):
+        covercache[list(track.artists)[0].name] = dict()
+    covercache[list(track.artists)[0].name][track.album.name] = img_url
 
     return img_url
