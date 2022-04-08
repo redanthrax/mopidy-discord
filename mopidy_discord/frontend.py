@@ -27,4 +27,6 @@ class DiscordFrontend(pykka.ThreadingActor, core.CoreListener):
         self.discord.shutdownEvent.set()
 
     def on_event(self, event, **kwargs):
-        self.discord.updateEvent.set()
+        # TODO: check for list of events in the config
+        if event == "playback_state_changed":
+            self.discord.updateEvent.set()
