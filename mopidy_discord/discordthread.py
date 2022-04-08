@@ -110,6 +110,9 @@ def get_cover(track):
     imgs = mb.get_release_group_image_list(recording["id"])
 
     img_url = imgs["images"][0]["thumbnails"]["large"]
+    for img in imgs["images"]:
+        if img["front"]:
+            img_url = img["thumbnails"]["large"]
 
     if not (list(track.artists)[0].name in covercache):
         covercache[list(track.artists)[0].name] = dict()
