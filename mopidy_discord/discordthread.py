@@ -77,10 +77,13 @@ class DiscordThread(threading.Thread):
             start_time = current_time - position
             end_time = start_time + length
 
+            details = (f"{track.name} - {list(track.artists)[0].name}")[:128]
+            state = (f"{track.album.name}")[:128]
+
             # TODO: use the config as format for details and state etc.
             self.discord.update(
-                    details = f"{track.name} - {list(track.artists)[0].name}",
-                    state = f"{track.album.name}",
+                    details = details,
+                    state = state,
                     large_image = cover_uri,
                     small_image = "large_fallback", # TODO: make this configurable and maybe make it show the backend source??
                     large_text = "Mopidy",
