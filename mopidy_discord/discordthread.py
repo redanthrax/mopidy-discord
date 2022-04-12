@@ -25,11 +25,35 @@ class DiscordThread(threading.Thread):
         self.pid = pid
 
         self.discord = None
+        self.connected = False
+
+        # TODO: make this a config option (im doin a lot of these just cuz ion
+        #       feel like pulling up another window with the config lmao)
+        self.failcount = 0
+        self.failcount_limit = 5
 
         self.updateEvent = threading.Event()
         self.shutdownEvent = threading.Event()
         
         self.event_loop = None
+
+    def reconnect_discord(self, retryHandler = None, onReconnect = None):
+        if self.failcount >= self.failcount_limit:
+            self.failcount = 0
+        self.failcount += 1
+        logger.info(f"Attempting reconnect... ({self.failcount}/{self.failcount_limit})")
+        try:
+            self.discord.connect()
+            logger.info("Reconnect successful")
+            self.failcount = 0
+            self.connected = True
+            if callable(onReconnect):
+                onReconnect()
+        except:
+            logger.error("Failed to connect")
+            self.connected = False
+            if self.failcount < self.failcount_limit and callable(retryHandler):
+                retryHandler()
     
     def run(self):
         logger.info("Starting Discord RPC")
@@ -38,7 +62,11 @@ class DiscordThread(threading.Thread):
         asyncio.set_event_loop(self.event_loop)
 
         self.discord = pypresence.Presence(self.config["discord"]["client_id"])
-        self.discord.connect()
+        try:
+            self.discord.connect()
+            self.connected = True
+        except (pypresence.PyPresenceException, ConnectionRefusedError):
+            pass
 
         logger.info("Entering Discord event loop")
         while True:
@@ -49,6 +77,11 @@ class DiscordThread(threading.Thread):
 
             self.updateEvent.clear()
 
+            if not self.connected:
+                logger.warning("Discord RPC is not connected!")
+                self.reconnect_discord(self.updateEvent.set)
+                continue
+
             logger.info("Updating presence")
 
             playback = self.core.playback
@@ -57,42 +90,47 @@ class DiscordThread(threading.Thread):
             # TODO: make a thing that displays the presence for a few seconds
             #       before clearing and make it possible to change it in the
             #       config
-            if not (track and (playback.get_state().get() == PlaybackState.PLAYING)):
-                self.discord.clear(self.pid)
-                continue
+            try:
+                if not (track and (playback.get_state().get() == PlaybackState.PLAYING)):
+                        self.discord.clear(self.pid)
+                        continue
 
-            # TODO: what the fuck is this god I don't know how to write code
-            tuples = library.get_images([track.uri]).get()[track.uri]
-            cover_uri = tuples[0].uri
-            if cover_uri[:4] != "http":
-                cover_uri = get_cover(track)
-                if cover_uri == "":
-                    cover_uri = "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Arch_Linux_logo.svg/1280px-Arch_Linux_logo.svg.png" # TODO: replace with built in fallback from the app
+                # TODO: what the fuck is this god I don't know how to write code
+                tuples = library.get_images([track.uri]).get()[track.uri]
+                cover_uri = tuples[0].uri
+                if cover_uri[:4] != "http":
+                    cover_uri = get_cover(track)
+                    if cover_uri == "":
+                        cover_uri = "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Arch_Linux_logo.svg/1280px-Arch_Linux_logo.svg.png" # TODO: replace with built in fallback from the app
 
-            # TODO: make this look nicer
-            length = int(track.length * 0.001) # milliseconds -> seconds
-            position = int(playback.get_time_position().get() * 0.001) # milliseconds -> seconds
-            current_time = int(datetime.datetime.now().timestamp()) # seconds
+                # TODO: make this look nicer
+                length = int(track.length * 0.001) # milliseconds -> seconds
+                position = int(playback.get_time_position().get() * 0.001) # milliseconds -> seconds
+                current_time = int(datetime.datetime.now().timestamp()) # seconds
 
-            start_time = current_time - position
-            end_time = start_time + length
+                start_time = current_time - position
+                end_time = start_time + length
 
-            details = (f"{track.name} - {list(track.artists)[0].name}")[:128]
-            state = (f"{track.album.name}")[:128]
+                details = (f"{track.name} - {list(track.artists)[0].name}")[:128]
+                state = (f"{track.album.name}")[:128]
 
-            # TODO: use the config as format for details and state etc.
-            self.discord.update(
-                    details = details,
-                    state = state,
-                    large_image = cover_uri,
-                    small_image = "large_fallback", # TODO: make this configurable and maybe make it show the backend source??
-                    large_text = "Mopidy",
-                    small_text = "spaghetti cat", # TODO: line 76
-                    instance = True,
-                    start = start_time,
-                    end = end_time,
-                    pid = self.pid
-                )
+                # TODO: use the config as format for details and state etc.
+                self.discord.update(
+                        details = details,
+                        state = state,
+                        large_image = cover_uri,
+                        small_image = "large_fallback", # TODO: make this configurable and maybe make it show the backend source??
+                        large_text = "Mopidy",
+                        small_text = "spaghetti cat", # TODO: line 76
+                        instance = True,
+                        start = start_time,
+                        end = end_time,
+                        pid = self.pid
+                    )
+            except pypresence.PyPresenceException:
+                logger.error("Presence updated failed...")
+                self.reconnect_discord(self.updateEvent.set)
+
 
         logger.info("Closing Discord RPC")
         self.discord.close()
