@@ -43,14 +43,16 @@ class DiscordThread(threading.Thread):
         self.failcount += 1
         logger.info(f"Attempting reconnect... ({self.failcount}/{self.failcount_limit})")
         try:
+            if self.discord == None:
+                self.discord = pypresence.Presence(self.config["discord"]["client_id"])
             self.discord.connect()
             logger.info("Reconnect successful")
             self.failcount = 0
             self.connected = True
             if callable(onReconnect):
                 onReconnect()
-        except:
-            logger.error("Failed to connect")
+        except Exception as e:
+            logger.error("Failed to connect", e)
             self.connected = False
             if self.failcount < self.failcount_limit and callable(retryHandler):
                 retryHandler()
@@ -61,12 +63,7 @@ class DiscordThread(threading.Thread):
         self.event_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.event_loop)
 
-        self.discord = pypresence.Presence(self.config["discord"]["client_id"])
-        try:
-            self.discord.connect()
-            self.connected = True
-        except (pypresence.PyPresenceException, ConnectionRefusedError):
-            pass
+        self.reconnect_discord()
 
         logger.info("Entering Discord event loop")
         while True:
@@ -99,7 +96,10 @@ class DiscordThread(threading.Thread):
                 tuples = library.get_images([track.uri]).get()[track.uri]
                 cover_uri = tuples[0].uri
                 if cover_uri[:4] != "http":
-                    cover_uri = get_cover(track)
+                    try:
+                        cover_uri = get_cover(track)
+                    except:
+                        cover_uri = ""
                     if cover_uri == "":
                         cover_uri = "https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Arch_Linux_logo.svg/1280px-Arch_Linux_logo.svg.png" # TODO: replace with built in fallback from the app
 
