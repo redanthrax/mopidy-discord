@@ -76,7 +76,7 @@ class DiscordThread(threading.Thread):
 
             if not self.connected:
                 logger.warning("Discord RPC is not connected!")
-                self.reconnect_discord(self.updateEvent.set)
+                self.reconnect_discord(self.updateEvent.set, self.updateEvent.set)
                 continue
 
             logger.info("Updating presence")
@@ -129,7 +129,7 @@ class DiscordThread(threading.Thread):
                     )
             except pypresence.PyPresenceException:
                 logger.error("Presence updated failed...")
-                self.reconnect_discord(self.updateEvent.set)
+                self.reconnect_discord(self.updateEvent.set, self.updateEvent.set)
 
 
         logger.info("Closing Discord RPC")
